@@ -25,6 +25,7 @@ library(factoextra)
 library(rpart)
 library(rpart.plot)
 library(caret)
+library(dplyr)
 
 ```
 
@@ -174,16 +175,17 @@ fviz_cluster(result_k5, data =func_data2,
              )
 ```
 
-#
+#Decision tree model:
 ```{r}
 find_usefull=read_csv("find_usefull.csv")
 find_usefull<-find_usefull[c("user_pseudo_id","answer")]
-reg_data<-full_join(func_data,find_usefull,by="user_pseudo_id")
-reg_data<-reg_data[c("num_of_read_uses","num_of_find_uses","num_of_explore_uses","answer")]
+DT_data<-full_join(func_data,find_usefull,by="user_pseudo_id")
+DT_data<-reg_data[c("num_of_read_uses","num_of_find_uses","num_of_explore_uses","answer")]
 
-reg_data$answer[reg_data$answer=="not sure"]<-"no"
-new_df <- na.omit(reg_data, "answer")
+reg_data$answer[DT_data$answer=="not sure"]<-"no"
+new_df <- na.omit(DT_data, "answer")
 ```
+#The Decision tree model 
 ```{r}
 fit <- rpart(answer~num_of_read_uses+num_of_explore_uses+num_of_find_uses, data = new_df, method='class')
 rpart.plot(fit, extra = 106)
@@ -216,7 +218,6 @@ ggplot(sum_of_calssi,aes(x = pred, y = new_df.answer, fill = n )) +
 ### Data README
 
 ```{r include_data_readme, comment=''}
-
 
 ```
 
