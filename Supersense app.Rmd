@@ -1,0 +1,222 @@
+---
+title: "Final Project"
+author: "Team F"
+output: pdf_document
+  
+---
+
+
+```{r load-packages, message = FALSE,include = FALSE}
+library(ClusterR)
+library(cluster)
+library(knitr)
+library(tidyverse)
+library(broom)
+library(htmltools)
+library(dplyr)
+library(latexpdf)
+library(tinytex)
+library(RColorBrewer)
+library(rworldmap)
+library(readxl)
+library(scales)
+library(ggpubr)
+library(factoextra)
+library(rpart)
+library(rpart.plot)
+library(caret)
+
+```
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo=FALSE) # hide source code in the document
+knitr::opts_chunk$set(warning = FALSE)
+```
+```{r, include=FALSE}
+
+options(tinytex.verbose = TRUE)
+```
+
+
+```{r}
+seasson=read.csv("seasson.csv")
+
+```
+
+#number of seassion table
+```{r}
+num_seassions<-group_by(seasson,user_pseudo_id)%>%count()%>%arrange(desc(n))
+colnames(num_seassions)[2]<-"number_of_seassion"
+```
+
+
+#import the read.csv and sum the number of reader func uses per user
+```{r}
+read=read.csv("read.csv")
+read_data<-read%>%group_by(user_pseudo_id)%>%count()
+colnames(read_data)[2]<-"num_of_read_uses"
+```
+#import the speech_event.csv and sum the number of speech_event func uses per user
+```{r}
+speech=read.csv("speech_event.csv")
+speech_data<-speech%>%group_by(user_pseudo_id)%>%count()
+colnames(speech_data)[2]<-"num_of_speech_uses"
+```
+#import the find.csv and sum the number of find func uses per user
+```{r}
+find<-read.csv("find.csv")
+find_data<-find%>%group_by(user_pseudo_id)%>%count()
+colnames(find_data)[2]<-"num_of_find_uses"
+
+```
+#import the explore.csv and sum the number of explore func uses per user
+```{r}
+explore=read.csv("explore.csv")
+explore_data<-explore%>%group_by(user_pseudo_id)%>%count()
+colnames(explore_data)[2]<-"num_of_explore_uses"
+
+```
+#all users ids
+```{r}
+seasson=read.csv("seasson.csv")
+all_users<-seasson%>%group_by(user_pseudo_id)%>%count()
+all_users <- as.data.frame(all_users)
+```
+
+#functions data table, joining between all the tables
+```{r}
+func_data<-full_join(read_data,speech_data,by="user_pseudo_id")%>%
+  full_join(find_data,by="user_pseudo_id")%>%
+  full_join(explore_data,by="user_pseudo_id")
+func_data[is.na(func_data)] <- 0
+```
+
+#
+```{r}
+normalit<-function(m){
+   (m - min(m))/(max(m)-min(m))
+}
+```
+#filtering the data to the columns we want for the Kmeans model
+```{r, ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+func_data2<-func_data[c("user_pseudo_id","num_of_find_uses","num_of_explore_uses","num_of_read_uses")]
+func_data2<-func_data2%>%filter(num_of_find_uses<150)
+users_ids<-func_data2[1]
+func_data2<-func_data2[c("num_of_find_uses","num_of_explore_uses","num_of_read_uses")]
+
+```
+
+
+
+#Normalize the data
+```{r}
+func_data2<-func_data2%>%mutate(num_of_find_uses = normalit(num_of_find_uses))%>%
+            mutate(num_of_explore_uses = normalit(num_of_explore_uses))%>%
+            mutate(num_of_read_uses = normalit(num_of_read_uses))
+```
+#Kmean Method for k=3...7
+```{r}
+result_k1<-kmeans(func_data2, centers = 1)
+result_k2<-kmeans(func_data2, centers = 2)
+result_k3<-kmeans(func_data2, centers = 3)
+result_k4<-kmeans(func_data2, centers = 4)
+result_k5<-kmeans(func_data2, centers = 5)
+result_k6<-kmeans(func_data2, centers = 6)
+result_k7<-kmeans(func_data2, centers = 7)
+result_k8<-kmeans(func_data2, centers = 8)
+result_k9<-kmeans(func_data2, centers = 9)
+result_k10<-kmeans(func_data2, centers = 10)
+
+```
+
+#Drawing the graph of (K,TOTTS) for picking the best K acording to the Elbow method
+```{r}
+x<-c(1,2,3,4,5,6,7,8,9,10)
+y<-c(result_k1$tot.withinss,result_k2$tot.withinss,result_k3$tot.withinss,result_k4$tot.withinss,result_k5$tot.withinss,result_k6$tot.withinss,result_k7$tot.withinss,result_k8$tot.withinss,result_k9$tot.withinss,result_k10$tot.withinss)
+elbow_graph<-data.frame(x, y)
+ggplot(elbow_graph,aes(x=x,y=y))+geom_line()+geom_point(color="red")+
+  labs(title = "Kmeans K Graph",
+       x="K clusters",
+       y="The Sum Of Squared Errors")+scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10))+theme_bw()
+```
+#creating the analyze data
+```{r}
+analyze_data<-func_data2
+analyze_data<-analyze_data%>%mutate(cluster=result_k5$cluster)%>%mutate(user_pseudo_id=users_ids$user_pseudo_id)
+analyze_data%>%arrange(desc(cluster))
+```
+
+
+# Mean of each feature for each cluster 
+```{r}
+
+mean<-analyze_data%>% 
+    group_by(cluster) %>%
+    summarise_all("mean")
+```
+#std
+```{r}
+std<-analyze_data%>% 
+    group_by(cluster) %>%
+    summarise_all("sd")
+```
+
+## Table with all information and cluster number
+```{r}
+kmeans_conc_data<-seasson%>% distinct(user_pseudo_id, .keep_all = TRUE)%>%full_join(analyze_data,seasson,by="user_pseudo_id")%>%na.omit()
+```
+#Kmean with k=5 plot
+```{r}
+fviz_cluster(result_k5, data =func_data2,
+             geom = "point",
+             ellipse.type = "convex", 
+             ggtheme = theme_bw()
+             )
+```
+
+#
+```{r}
+find_usefull=read_csv("find_usefull.csv")
+find_usefull<-find_usefull[c("user_pseudo_id","answer")]
+reg_data<-full_join(func_data,find_usefull,by="user_pseudo_id")
+reg_data<-reg_data[c("num_of_read_uses","num_of_find_uses","num_of_explore_uses","answer")]
+
+reg_data$answer[reg_data$answer=="not sure"]<-"no"
+new_df <- na.omit(reg_data, "answer")
+```
+```{r}
+fit <- rpart(answer~num_of_read_uses+num_of_explore_uses+num_of_find_uses, data = new_df, method='class')
+rpart.plot(fit, extra = 106)
+```
+#Conf metrix
+```{r}
+pred<-predict(fit,type="class")
+pred_df<-data.frame(pred,new_df$answer)
+pred_tbl<-table(pred,new_df$answer)
+confusionMatrix(pred_tbl)
+```
+```{r}
+sum_of_calssi<-pred_df%>%group_by(pred,new_df.answer)%>%count()
+```
+## Conf metrix
+```{r}
+ggplot(sum_of_calssi,aes(x = pred, y = new_df.answer, fill = n )) +
+  geom_tile() +
+  geom_text(aes(label = n)) +
+  scale_fill_gradient(low = "white", high = "#3575b5") + 
+  scale_fill_gradient(low = "white", high = "#3575b5") +
+  labs(x = "yes", 
+       y = "no", 
+       title = "Confusion matrix of App Survey"
+       )
+```
+
+
+
+### Data README
+
+```{r include_data_readme, comment=''}
+
+
+```
+
