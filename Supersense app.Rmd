@@ -1,10 +1,13 @@
 ---
-title: "Final Project"
+title: "Project proposal"
 author: "Team F"
 output: pdf_document
   
 ---
-
+```{r}
+install.packages('ggpubr')
+install.packages('factoextra')
+```
 
 ```{r load-packages, message = FALSE,include = FALSE}
 library(ClusterR)
@@ -24,8 +27,6 @@ library(ggpubr)
 library(factoextra)
 library(rpart)
 library(rpart.plot)
-library(caret)
-library(dplyr)
 
 ```
 
@@ -38,7 +39,6 @@ knitr::opts_chunk$set(warning = FALSE)
 options(tinytex.verbose = TRUE)
 ```
 
-
 ```{r}
 seasson=read.csv("seasson.csv")
 
@@ -49,7 +49,11 @@ seasson=read.csv("seasson.csv")
 num_seassions<-group_by(seasson,user_pseudo_id)%>%count()%>%arrange(desc(n))
 colnames(num_seassions)[2]<-"number_of_seassion"
 ```
-
+#model data and removing duplicates
+```{r}
+modeldata<-full_join(data,num_seassions,by="user_pseudo_id")
+modeldata<-modeldata%>% distinct(user_pseudo_id, .keep_all = TRUE)
+```
 
 #import the read.csv and sum the number of reader func uses per user
 ```{r}
@@ -92,12 +96,6 @@ func_data<-full_join(read_data,speech_data,by="user_pseudo_id")%>%
 func_data[is.na(func_data)] <- 0
 ```
 
-#
-```{r}
-normalit<-function(m){
-   (m - min(m))/(max(m)-min(m))
-}
-```
 #filtering the data to the columns we want for the Kmeans model
 ```{r, ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
 func_data2<-func_data[c("user_pseudo_id","num_of_find_uses","num_of_explore_uses","num_of_read_uses")]
@@ -107,26 +105,32 @@ func_data2<-func_data2[c("num_of_find_uses","num_of_explore_uses","num_of_read_u
 
 ```
 
-
+```{r}
+normalit<-function(m){
+   (m - min(m))/(max(m)-min(m))
+}
+```
 
 #Normalize the data
 ```{r}
-func_data2<-func_data2%>%mutate(num_of_find_uses = normalit(num_of_find_uses))%>%
+func_data2_n<-func_data2%>%mutate(num_of_find_uses = normalit(num_of_find_uses))%>%
             mutate(num_of_explore_uses = normalit(num_of_explore_uses))%>%
             mutate(num_of_read_uses = normalit(num_of_read_uses))
+func_data2_n
 ```
 #Kmean Method for k=3...7
 ```{r}
-result_k1<-kmeans(func_data2, centers = 1)
-result_k2<-kmeans(func_data2, centers = 2)
-result_k3<-kmeans(func_data2, centers = 3)
-result_k4<-kmeans(func_data2, centers = 4)
-result_k5<-kmeans(func_data2, centers = 5)
-result_k6<-kmeans(func_data2, centers = 6)
-result_k7<-kmeans(func_data2, centers = 7)
-result_k8<-kmeans(func_data2, centers = 8)
-result_k9<-kmeans(func_data2, centers = 9)
-result_k10<-kmeans(func_data2, centers = 10)
+set.seed(1111)
+result_k1<-kmeans(func_data2_n, centers = 1)
+result_k2<-kmeans(func_data2_n, centers = 2)
+result_k3<-kmeans(func_data2_n, centers = 3)
+result_k4<-kmeans(func_data2_n, centers = 4)
+result_k5<-kmeans(func_data2_n, centers = 5)
+result_k6<-kmeans(func_data2_n, centers = 6)
+result_k7<-kmeans(func_data2_n, centers = 7)
+result_k8<-kmeans(func_data2_n, centers = 8)
+result_k9<-kmeans(func_data2_n, centers = 9)
+result_k10<-kmeans(func_data2_n, centers = 10)
 
 ```
 
@@ -143,81 +147,113 @@ ggplot(elbow_graph,aes(x=x,y=y))+geom_line()+geom_point(color="red")+
 #creating the analyze data
 ```{r}
 analyze_data<-func_data2
-analyze_data<-analyze_data%>%mutate(cluster=result_k5$cluster)%>%mutate(user_pseudo_id=users_ids$user_pseudo_id)
+analyze_data<-analyze_data%>%mutate(cluster=result_k6$cluster)%>%mutate(user_pseudo_id=users_ids$user_pseudo_id)
 analyze_data%>%arrange(desc(cluster))
 ```
+```{r}
+analyze_data_n<-func_data2_n
+analyze_data_n<-analyze_data_n%>%mutate(cluster=result_k6$cluster)%>%mutate(user_pseudo_id=users_ids$user_pseudo_id)
+analyze_data_n%>%arrange(desc(cluster))
+```
 
+```{r}
+result_k6
+```
 
 # Mean of each feature for each cluster 
 ```{r}
 
-mean<-analyze_data%>% 
+analyze_data%>%
+    select(-user_pseudo_id)%>%
+    group_by(cluster) %>%
+    summarise(across(everything(), list(sum)))
+```
+
+```{r}
+analyze_data%>%
     group_by(cluster) %>%
     summarise_all("mean")
 ```
+
 #std
 ```{r}
-std<-analyze_data%>% 
+analyze_data%>% 
     group_by(cluster) %>%
     summarise_all("sd")
 ```
-
-## Table with all information and cluster number
 ```{r}
-kmeans_conc_data<-seasson%>% distinct(user_pseudo_id, .keep_all = TRUE)%>%full_join(analyze_data,seasson,by="user_pseudo_id")%>%na.omit()
+new_df <- seasson%>% distinct(user_pseudo_id, .keep_all = TRUE)%>%full_join(analyze_data,seasson,by="user_pseudo_id")%>%na.omit()
 ```
-#Kmean with k=5 plot
 ```{r}
-fviz_cluster(result_k5, data =func_data2,
+new_df%>%
+  count(country)%>%
+  arrange(desc(n))
+```
+
+```{r}
+new_df_check_county3 <- new_df%>%
+  filter(cluster == 2)%>%
+  count(country)%>%
+  arrange(desc(n))
+new_df_check_county3
+```
+```{r}
+new_df_check_county1 <- new_df%>%
+  filter(cluster == 3)%>%
+  count(country)%>%
+  arrange(desc(n))
+new_df_check_county1
+```
+```{r}
+new_df_check_county4 <- new_df%>%
+  filter(cluster == 4)%>%
+  count(continent)%>%
+  arrange(desc(n))
+new_df_check_county4
+```
+
+
+#Confution Metrix of K=5
+```{r}
+fviz_cluster(result_k6, data =func_data2,
              geom = "point",
              ellipse.type = "convex", 
              ggtheme = theme_bw()
              )
 ```
 
-#Decision tree model:
+#reg model
+
 ```{r}
 find_usefull=read_csv("find_usefull.csv")
 find_usefull<-find_usefull[c("user_pseudo_id","answer")]
-DT_data<-full_join(func_data,find_usefull,by="user_pseudo_id")
-DT_data<-reg_data[c("num_of_read_uses","num_of_find_uses","num_of_explore_uses","answer")]
+reg_data<-full_join(func_data,find_usefull,by="user_pseudo_id")
+reg_data<-reg_data[c("num_of_read_uses","num_of_find_uses","num_of_explore_uses","answer")]
 
-reg_data$answer[DT_data$answer=="not sure"]<-"no"
-new_df <- na.omit(DT_data, "answer")
+reg_data$answer[reg_data$answer=="not sure"]<-"no"
+new_df <- na.omit(reg_data, "answer")
+new_df
 ```
-#The Decision tree model 
 ```{r}
+
 fit <- rpart(answer~num_of_read_uses+num_of_explore_uses+num_of_find_uses, data = new_df, method='class')
 rpart.plot(fit, extra = 106)
 ```
-#Conf metrix
-```{r}
-pred<-predict(fit,type="class")
-pred_df<-data.frame(pred,new_df$answer)
-pred_tbl<-table(pred,new_df$answer)
-confusionMatrix(pred_tbl)
-```
-```{r}
-sum_of_calssi<-pred_df%>%group_by(pred,new_df.answer)%>%count()
-```
-## Conf metrix
-```{r}
-ggplot(sum_of_calssi,aes(x = pred, y = new_df.answer, fill = n )) +
-  geom_tile() +
-  geom_text(aes(label = n)) +
-  scale_fill_gradient(low = "white", high = "#3575b5") + 
-  scale_fill_gradient(low = "white", high = "#3575b5") +
-  labs(x = "yes", 
-       y = "no", 
-       title = "Confusion matrix of App Survey"
-       )
-```
 
 
+```{r,warning = FALSE }
+data2 <- func_data 
+data2$sum_row<-rowSums(func_data[c("num_of_read_uses","num_of_find_uses","num_of_explore_uses")])
 
+data2$sum_row<-as.numeric(data2$sum_row)
+data2<-data2 %>%arrange(desc(sum_row))
+top_15<-head(data2,15)
+top_15
+```
 ### Data README
 
 ```{r include_data_readme, comment=''}
 
+cat(readLines('../data/README.md'), sep = '\n')
 ```
 
