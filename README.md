@@ -34,7 +34,7 @@ type and its connection to the user and the useful feature.
 | sub_continent | char | The sub continent where the user used the app |
 | value  | Char | Indicate the the explore feature started (explore.csv)|
 | session_id | int | The session id number,(seasson.csv) |
-| object_name | char | The objec |
+| object_name | char | The object the app found |
 |
 
 
